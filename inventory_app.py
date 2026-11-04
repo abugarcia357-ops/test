@@ -2,112 +2,89 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 
-st.set_page_config(
-    page_title="Product Inventory Analysis System",
-    layout="wide"
-)
-
 st.title("Online Store Product Inventory Analysis System")
 
-if "inventory_data" not in st.session_state:
-    st.session_state["inventory_data"] = []
+if "products" not in st.session_state:
+    st.session_state.products = []
 
-st.header("Product Entry Form")
+product_name = st.text_input("Enter Product Name")
 
-with st.form("inventory_form"):
-    product_name = st.text_input("Product Name")
-    product_category = st.selectbox(
-        "Product Category",
-        ["Electronics", "Clothing", "Accessories"]
-    )
-    stock_quantity_str = st.text_input("Stock Quantity")
-    
-    submit_button = st.form_submit_button("Process Inventory")
+category = st.selectbox(
+    "Select Product Category",
+    ["Electronics", "Clothing", "Accessories"]
+)
 
-if submit_button:
-    validation_passed = True
-    
-    if not product_name.strip():
-        st.error("Error: Product Name cannot be empty.")
-        validation_passed = False
+quantity_input = st.text_input("Enter Stock Quantity")
 
+if st.button("Process Inventory"):
     try:
-        stock_quantity = int(stock_quantity_str)
-        if stock_quantity < 0:
-            st.error("Error: Stock Quantity cannot be negative.")
-            validation_passed = False
-    except ValueError:
-        st.error("Error: Stock Quantity must be a valid integer.")
-        validation_passed = False
+        if product_name.strip() == "":
+            raise ValueError("Product name cannot be empty.")
 
-    if validation_passed:
-        st.success(f"Successfully processed: {product_name} | Category: {product_category} | Quantity: {stock_quantity}")
-        
-        st.session_state["inventory_data"].append({
+        quantity = int(quantity_input)
+
+        if quantity < 0:
+            raise ValueError("Stock quantity cannot be negative.")
+
+        product = {
             "Product Name": product_name.strip(),
-            "Category": product_category,
-            "Quantity": stock_quantity
-        })
+            "Category": category,
+            "Quantity": quantity
+        }
 
-st.divider()
-st.header("Inventory Analysis and Reports")
+        st.session_state.products.append(product)
+        st.success("Product added successfully!")
 
-if len(st.session_state["inventory_data"]) > 0:
-    current_data = st.session_state["inventory_data"]
-else:
+    except ValueError as e:
+        st.error(f"Invalid input: {e}")
+
+if len(st.session_state.products) > 0:
+
     
-    current_data = [
-        {"Product Name": "Laptop", "Category": "Electronics", "Quantity": 30},
-        {"Product Name": "T-Shirt", "Category": "Clothing", "Quantity": 15},
-        {"Product Name": "Watch", "Category": "Accessories", "Quantity": 8},
-        {"Product Name": "Headphones", "Category": "Electronics", "Quantity": 25}
-    ]
+    df = pd.DataFrame(st.session_state.products)
 
-quantities = [item["Quantity"] for item in current_data]
-quantities_array = np.array(quantities)
+    def classify_stock(quantity):
+        if quantity >= 20:
+            return "Sufficient"
+        elif quantity >= 1:
+            return "Low Stock"
+        else:
+            return "Out of Stock"
 
-st.subheader("NumPy Stock Analysis")
-total_stock = np.sum(quantities_array)
-min_stock = np.min(quantities_array)
-below_20_count = np.sum(quantities_array < 20)
+    df["Stock Status"] = df["Quantity"].apply(classify_stock)
 
-col1, col2, col3 = st.columns(3)
-col1.metric("Total Stock Quantity", total_stock)
-col2.metric("Minimum Stock Quantity", min_stock)
-col3.metric("Stock Below 20 Units", below_20_count)
+    st.subheader("Product Inventory Data")
+    st.dataframe(df)
 
-st.subheader("Inventory Status Report")
+    stock_quantities = np.array(df["Quantity"])
 
-df = pd.DataFrame(current_data)
+    total_stock = np.sum(stock_quantities)
+    minimum_stock = np.min(stock_quantities)
+    low_stock_count = np.sum(stock_quantities < 20)
 
-def classify_stock(qty):
-    if qty >= 20:
-        return "Sufficient"
-    elif 1 <= qty <= 19:
-        return "Low Stock"
-    else:
-        return "Out of Stock"
+    st.subheader("NumPy Inventory Analysis")
+    st.write("Total Stock:", int(total_stock))
+    st.write("Minimum Stock:", int(minimum_stock))
+    st.write("Products Below 20 Units:", int(low_stock_count))
 
-df["Stock Status"] = df["Quantity"].apply(classify_stock)
+    low_stock_df = df[df["Quantity"] < 20]
 
-st.write("Complete Inventory DataFrame:")
-st.dataframe(df, use_container_width=True)
+    st.subheader("Products Below 20 Units")
+    st.dataframe(low_stock_df)
 
-st.subheader("Filtered Products (Stock Quantity < 20)")
-low_stock_df = df[df["Quantity"] < 20]
-if not low_stock_df.empty:
-    st.dataframe(low_stock_df, use_container_width=True)
+    category_summary = (
+        df.groupby("Category")["Quantity"]
+        .sum()
+        .reset_index()
+    )
+
+    st.subheader("Total Stock by Category")
+    st.dataframe(category_summary)
+
+    st.subheader("Inventory Bar Chart")
+    st.bar_chart(
+        category_summary.set_index("Category")["Quantity"]
+    )
+
 else:
-    st.write("No products currently have stock below 20 units.")
-
-st.subheader("Category-Based Analysis")
-
-grouped_df = df.groupby("Category")["Quantity"].sum().reset_index()
-grouped_df.rename(columns={"Quantity": "Total Stock Quantity"}, inplace=True)
-
-st.write("Grouped Inventory Data by Category:")
-st.dataframe(grouped_df, use_container_width=True)
-
-st.subheader("Total Stock Quantity by Category (Chart)")
-chart_data = grouped_df.set_index("Category")
-st.bar_chart(chart_data)
+    st.info("Please enter a product to begin inventory analysis.")
