@@ -1,81 +1,113 @@
+import streamlit as st
 import numpy as np
 import pandas as pd
-import streamlit as st
 
+st.set_page_config(
+    page_title="Product Inventory Analysis System",
+    layout="wide"
+)
 
-CATEGORIES = ["Electronics", "Clothing", "Accessories"]
-
-
-def get_stock_status(quantity):
-	if quantity >= 20:
-		return "Sufficient"
-	if quantity >= 1:
-		return "Low Stock"
-	return "Out of Stock"
-
-
-st.set_page_config(page_title="Product Inventory Analysis", page_icon="📦")
 st.title("Online Store Product Inventory Analysis System")
-st.write("Add products to manage inventory and review stock levels.")
 
-if "products" not in st.session_state:
-	st.session_state["products"] = []
+if "inventory_data" not in st.session_state:
+    st.session_state["inventory_data"] = []
 
-with st.form("product_entry", clear_on_submit=True):
-	product_name = st.text_input("Product Name")
-	product_category = st.selectbox("Product Category", CATEGORIES)
-	stock_quantity = st.text_input("Stock Quantity", placeholder="Enter a whole number")
-	submitted = st.form_submit_button("Process Inventory")
+st.header("Product Entry Form")
 
-if submitted:
-	if not product_name.strip():
-		st.error("Product Name cannot be empty.")
-	else:
-		try:
-			quantity = int(stock_quantity.strip())
-			if quantity < 0:
-				st.error("Stock Quantity cannot be negative.")
-			else:
-				product = {
-					"Product Name": product_name.strip(),
-					"Category": product_category,
-					"Quantity": quantity,
-				}
-				st.session_state["products"].append(product)
-				st.success("Product information entered successfully.")
-				st.write("Added product:", product)
-		except (ValueError, AttributeError):
-			st.error("Enter a valid whole number for Stock Quantity.")
+with st.form("inventory_form"):
+    product_name = st.text_input("Product Name")
+    product_category = st.selectbox(
+        "Product Category",
+        ["Electronics", "Clothing", "Accessories"]
+    )
+    stock_quantity_str = st.text_input("Stock Quantity")
+    
+    submit_button = st.form_submit_button("Process Inventory")
 
-if st.session_state["products"]:
-	st.subheader("Inventory Analysis")
-	inventory = pd.DataFrame(st.session_state["products"])
-	inventory["Stock Status"] = inventory["Quantity"].apply(get_stock_status)
+if submit_button:
+    validation_passed = True
+    
+    if not product_name.strip():
+        st.error("Error: Product Name cannot be empty.")
+        validation_passed = False
 
-	quantities = inventory["Quantity"].to_numpy(dtype=int)
-	col1, col2, col3 = st.columns(3)
-	col1.metric("Total Stock Quantity", int(np.sum(quantities)))
-	col2.metric("Minimum Stock Quantity", int(np.min(quantities)))
-	col3.metric("Products Below 20 Units", int(np.count_nonzero(quantities < 20)))
+    try:
+        stock_quantity = int(stock_quantity_str)
+        if stock_quantity < 0:
+            st.error("Error: Stock Quantity cannot be negative.")
+            validation_passed = False
+    except ValueError:
+        st.error("Error: Stock Quantity must be a valid integer.")
+        validation_passed = False
 
-	st.subheader("Complete Product Inventory")
-	st.dataframe(inventory, use_container_width=True, hide_index=True)
+    if validation_passed:
+        st.success(f"Successfully processed: {product_name} | Category: {product_category} | Quantity: {stock_quantity}")
+        
+        st.session_state["inventory_data"].append({
+            "Product Name": product_name.strip(),
+            "Category": product_category,
+            "Quantity": stock_quantity
+        })
 
-	st.subheader("Products Below 20 Units")
-	low_stock = inventory[ inventory["Quantity"] < 20 ]
-	if low_stock.empty:
-		st.info("There are no products below 20 units.")
-	else:
-		st.dataframe(low_stock, use_container_width=True, hide_index=True)
+st.divider()
+st.header("Inventory Analysis and Reports")
 
-	st.subheader("Inventory by Category")
-	category_totals = (
-		inventory.groupby("Category")["Quantity"]
-		.sum()
-		.reindex(CATEGORIES, fill_value=0)
-		.rename("Total Stock Quantity")
-	)
-	st.dataframe(category_totals, use_container_width=True)
-	st.bar_chart(category_totals)
+if len(st.session_state["inventory_data"]) > 0:
+    current_data = st.session_state["inventory_data"]
 else:
-	st.info("No products have been added yet. Enter a product to see inventory reports.")
+    
+    current_data = [
+        {"Product Name": "Laptop", "Category": "Electronics", "Quantity": 30},
+        {"Product Name": "T-Shirt", "Category": "Clothing", "Quantity": 15},
+        {"Product Name": "Watch", "Category": "Accessories", "Quantity": 8},
+        {"Product Name": "Headphones", "Category": "Electronics", "Quantity": 25}
+    ]
+
+quantities = [item["Quantity"] for item in current_data]
+quantities_array = np.array(quantities)
+
+st.subheader("NumPy Stock Analysis")
+total_stock = np.sum(quantities_array)
+min_stock = np.min(quantities_array)
+below_20_count = np.sum(quantities_array < 20)
+
+col1, col2, col3 = st.columns(3)
+col1.metric("Total Stock Quantity", total_stock)
+col2.metric("Minimum Stock Quantity", min_stock)
+col3.metric("Stock Below 20 Units", below_20_count)
+
+st.subheader("Inventory Status Report")
+
+df = pd.DataFrame(current_data)
+
+def classify_stock(qty):
+    if qty >= 20:
+        return "Sufficient"
+    elif 1 <= qty <= 19:
+        return "Low Stock"
+    else:
+        return "Out of Stock"
+
+df["Stock Status"] = df["Quantity"].apply(classify_stock)
+
+st.write("Complete Inventory DataFrame:")
+st.dataframe(df, use_container_width=True)
+
+st.subheader("Filtered Products (Stock Quantity < 20)")
+low_stock_df = df[df["Quantity"] < 20]
+if not low_stock_df.empty:
+    st.dataframe(low_stock_df, use_container_width=True)
+else:
+    st.write("No products currently have stock below 20 units.")
+
+st.subheader("Category-Based Analysis")
+
+grouped_df = df.groupby("Category")["Quantity"].sum().reset_index()
+grouped_df.rename(columns={"Quantity": "Total Stock Quantity"}, inplace=True)
+
+st.write("Grouped Inventory Data by Category:")
+st.dataframe(grouped_df, use_container_width=True)
+
+st.subheader("Total Stock Quantity by Category (Chart)")
+chart_data = grouped_df.set_index("Category")
+st.bar_chart(chart_data)
